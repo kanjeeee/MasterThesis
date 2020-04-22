@@ -2,6 +2,7 @@ import org.apache.jena.atlas.lib.Pair;
 import org.apache.jena.atlas.lib.tuple.Tuple;
 import org.apache.jena.ontology.OntClass;
 import org.apache.jena.ontology.OntModel;
+import org.apache.jena.ontology.OntTools;
 import org.apache.jena.tdb.store.Hash;
 import org.apache.jena.util.iterator.ExtendedIterator;
 
@@ -9,10 +10,11 @@ import javax.jnlp.IntegrationService;
 import java.io.*;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 
 enum Type {
 
-    first, second
+    first, second, third
 }
 
 public class Calculator {
@@ -28,9 +30,14 @@ public class Calculator {
         return calculate(ont1, ont2, mappings, writeToFile, title, Type.second);
     }
 
+    double calculateThird(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
+        return calculate(ont1, ont2, mappings, writeToFile, title, Type.third);
+    }
+
     double calculate(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title, Type type) {
 
         double value = 0;
+        double wholeTreeValue = 0;
         Integer iterator = 0;
 
         text = "Klasa,wartosc\n";
@@ -48,7 +55,6 @@ public class Calculator {
                 }
 
                 if (tree != null) {
-//                    System.out.print(rightPad(iterator.toString() + " ", 3));
                     double val = countTree(tree, mappings, type);
                     value = value + val;
                 }
@@ -74,10 +80,34 @@ public class Calculator {
         }
 
         text = text + "\n" + "SUMA:," + value;
+
+
+
+        wholeTreeValue = getWholeTreeValue(type, wholeTreeValue, ont1);
+
+
+        wholeTreeValue = getWholeTreeValue(type, wholeTreeValue, ont2);
+
+
+        text = text + "\n" + "MAX WARTOSC:, " + wholeTreeValue;
+
+        System.out.println("MAX NA DRZEWIE " + wholeTreeValue);
+
         if (writeToFile) {
             writeToFile(text, title);
         }
         return value;
+    }
+
+    private double getWholeTreeValue(Type type, double wholeTreeValue, OntModel ontModel) {
+        List<OntClass> list = OntTools.namedHierarchyRoots(ontModel);
+        for( int i = 0; i < list.size(); i++) {
+
+            double val = countTree(list.get(i), null, type);
+            wholeTreeValue = wholeTreeValue + val;
+//            System.out.println(i + ". " +list.get(i));
+        }
+        return wholeTreeValue;
     }
 
     double countTree(OntClass tree, OntModel mappings, Type type) {
@@ -88,9 +118,11 @@ public class Calculator {
             Integer b = values.getRight();
 
             double val = (a != 0 && b != 0 ) ? Math.pow(a, b) : 0;
-            System.out.println(rightPad("Class: " + tree, 50) + " value first: " + rightPad(values.getLeft().toString(), 3) + " second: " + rightPad(values.getRight().toString(), 3)+ "value: "+val);
+//            System.out.println(rightPad("Class: " + tree, 50) + " value first: " + rightPad(values.getLeft().toString(), 3) + " second: " + rightPad(values.getRight().toString(), 3)+ "value: "+val);
 
-            text = text + tree.toString() + ",=" + (val != 0 ? (values.getLeft().toString() + "^" + values.getRight().toString()) : "0") + "\n";
+            if (mappings != null) {
+                text = text + tree.toString() + ",=" + (val != 0 ? (values.getLeft().toString() + "^" + values.getRight().toString()) : "0") + "\n";
+            }
 
             return val;
         } else {
@@ -101,24 +133,35 @@ public class Calculator {
             double aa = 0;
             Iterator it = map.keySet().iterator();
 
-            text = text + tree.toString();
-            if (it.hasNext()) {
-                text = text + ",= ";
-            } else {
-                text = text + ",=0";
+
+            if (mappings != null) {
+                text = text + tree.toString();
+            } 
+
+            if (mappings != null) {
+                if (it.hasNext()) {
+                    text = text + ",= ";
+                } else {
+                    text = text + ",=0";
+                }
             }
 
             while (it.hasNext()) {
                 Integer key = (Integer)it.next();
                 Integer value = (Integer) map.get(key);
 
-                System.out.println("key:" + key + " value: " + value + " łącznie: " + Math.pow(value, key));
+//                System.out.println("key:" + key + " value: " + value + " łącznie: " + (type == Type.second ? Math.pow(value, key) : (value * key)));
 
-                aa = aa + Math.pow(value, key);
-                text = text + value.toString() + "^" + key.toString() + (it.hasNext() ?  " + " : "");
+                aa = aa + (type == Type.second ? Math.pow(value, key) : (value * key));
+
+                if (mappings != null) {
+                    text = text + value.toString() + (type == Type.second ? "^" : "*") + key.toString() + (it.hasNext() ?  " + " : "");
+                }
             }
 
-            text = text + "\n";
+            if (mappings != null) {
+                text = text + "\n";
+            }
 
             return aa;
         }
@@ -131,7 +174,7 @@ public class Calculator {
         if (model.hasSubClass()) {
             for (Iterator i = model.listSubClasses(); i.hasNext();) {
                 OntClass subModel = (OntClass) i.next();
-                if (mappings.getOntClass(subModel.getURI()) == null) {
+                if (mappings == null || mappings.getOntClass(subModel.getURI()) == null) {
                     Pair<Integer, Integer> values = valueOf(subModel, mappings);
                     value = value + 1 + values.getLeft();
                     height = Integer.max(height, 1 + values.getRight());
@@ -143,11 +186,11 @@ public class Calculator {
         }
     }
 
+
+
     void valueOf(OntClass model, OntModel mappings, HashMap<Integer, Integer> map, Integer height) {
 
         if (model.hasSubClass()) {
-
-//            Integer height = map.keySet().size() + 1;
 
             if (map.get(height) == null ) {
                 map.put(height, 0);
@@ -156,21 +199,11 @@ public class Calculator {
             for (Iterator i = model.listSubClasses(); i.hasNext();) {
                 OntClass subModel = (OntClass) i.next();
 
-//                System.out.println("SUBCLASS" + subModel);
-                if (mappings.getOntClass(subModel.getURI()) == null) {
+                if (mappings == null ||  mappings.getOntClass(subModel.getURI()) == null) {
 
                     Integer value = map.get(height) + 1;
-
-//                    System.out.println("dodajemy na wysokości: " + height + " wartość: " + value);
-
                     map.put(height, value);
-//                    System.out.println("KARO JEST SUPER " + subModel + " height: " + height + " values: " + value);
-
                     valueOf(subModel, mappings, map, height + 1);
-
-//                    Pair<Integer, Integer> values = valueOf(subModel, mappings);
-//                    value = value + 1 + values.getLeft();
-//                    height = Integer.max(height, 1 + values.getRight());
                 }
             }
         }
