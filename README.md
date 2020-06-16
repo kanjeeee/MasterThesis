@@ -1,3 +1,3 @@
 # MasterThesis
 
-Calculate knowledge increase usign ontology alignment
+Calculate knowledge increase using ontology alignment

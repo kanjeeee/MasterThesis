@@ -1,20 +1,19 @@
 import org.apache.jena.atlas.lib.Pair;
-import org.apache.jena.atlas.lib.tuple.Tuple;
 import org.apache.jena.ontology.OntClass;
 import org.apache.jena.ontology.OntModel;
 import org.apache.jena.ontology.OntTools;
-import org.apache.jena.tdb.store.Hash;
 import org.apache.jena.util.iterator.ExtendedIterator;
 
-import javax.jnlp.IntegrationService;
 import java.io.*;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
-enum Type {
+enum MeasureType {
 
-    first, second, third
+    MAX_DEPTH_POWER,
+    DEPTH_POWER,
+    DEPTH_SUM
 }
 
 public class Calculator {
@@ -22,23 +21,22 @@ public class Calculator {
     String text = "";
 
 
-    double calculateFirst(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
-        return calculate(ont1, ont2, mappings, writeToFile, title, Type.first);
+    double calculateMeasureMaxDepth(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
+        return calculate(ont1, ont2, mappings, writeToFile, title, MeasureType.MAX_DEPTH_POWER);
     }
 
-    double calculateSecond(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
-        return calculate(ont1, ont2, mappings, writeToFile, title, Type.second);
+    double calculateDepthPower(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
+        return calculate(ont1, ont2, mappings, writeToFile, title, MeasureType.DEPTH_POWER);
     }
 
-    double calculateThird(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
-        return calculate(ont1, ont2, mappings, writeToFile, title, Type.third);
+    double calculateDepthSum(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title) {
+        return calculate(ont1, ont2, mappings, writeToFile, title, MeasureType.DEPTH_SUM);
     }
 
-    double calculate(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title, Type type) {
+    double calculate(OntModel ont1, OntModel ont2, OntModel mappings, Boolean writeToFile, String title, MeasureType type) {
 
         double value = 0;
         double wholeTreeValue = 0;
-        Integer iterator = 0;
 
         text = "Klasa,wartosc\n";
 
@@ -47,7 +45,6 @@ public class Calculator {
             OntClass Ontclass = (OntClass) classes.next();
             if (Ontclass.getEquivalentClass() != null) {
 
-                iterator++;
                 OntClass tree = ont1.getOntClass(Ontclass.getURI());
 
                 if (tree == null) {
@@ -71,7 +68,6 @@ public class Calculator {
                     }
 
                     if (tree != null) {
-                        System.out.print(rightPad(iterator.toString() + " ", 3));
                         double val = countTree(tree, mappings, type);
                         value = value + val;
                     }
@@ -81,17 +77,11 @@ public class Calculator {
 
         text = text + "\n" + "SUMA:," + value;
 
-
-
         wholeTreeValue = getWholeTreeValue(type, wholeTreeValue, ont1);
-
 
         wholeTreeValue = getWholeTreeValue(type, wholeTreeValue, ont2);
 
-
         text = text + "\n" + "MAX WARTOSC:, " + wholeTreeValue;
-
-        System.out.println("MAX NA DRZEWIE " + wholeTreeValue);
 
         if (writeToFile) {
             writeToFile(text, title);
@@ -99,26 +89,24 @@ public class Calculator {
         return value;
     }
 
-    private double getWholeTreeValue(Type type, double wholeTreeValue, OntModel ontModel) {
+    private double getWholeTreeValue(MeasureType type, double wholeTreeValue, OntModel ontModel) {
         List<OntClass> list = OntTools.namedHierarchyRoots(ontModel);
         for( int i = 0; i < list.size(); i++) {
 
             double val = countTree(list.get(i), null, type);
             wholeTreeValue = wholeTreeValue + val;
-//            System.out.println(i + ". " +list.get(i));
         }
         return wholeTreeValue;
     }
 
-    double countTree(OntClass tree, OntModel mappings, Type type) {
-        if (type == Type.first) {
+    double countTree(OntClass tree, OntModel mappings, MeasureType type) {
+        if (type == MeasureType.MAX_DEPTH_POWER) {
             Pair<Integer, Integer> values = valueOf(tree, mappings);
 
-            Integer a = values.getLeft();
-            Integer b = values.getRight();
+            Integer base = values.getLeft();
+            Integer exponent = values.getRight();
 
-            double val = (a != 0 && b != 0 ) ? Math.pow(a, b) : 0;
-//            System.out.println(rightPad("Class: " + tree, 50) + " value first: " + rightPad(values.getLeft().toString(), 3) + " second: " + rightPad(values.getRight().toString(), 3)+ "value: "+val);
+            double val = (base != 0 && exponent != 0 ) ? Math.pow(base, exponent) : 0;
 
             if (mappings != null) {
                 text = text + tree.toString() + ",=" + (val != 0 ? (values.getLeft().toString() + "^" + values.getRight().toString()) : "0") + "\n";
@@ -130,7 +118,7 @@ public class Calculator {
             HashMap map = new HashMap<Integer, Integer>();
             valueOf(tree, mappings, map, 1);
 
-            double aa = 0;
+            double sum = 0;
             Iterator it = map.keySet().iterator();
 
 
@@ -150,12 +138,10 @@ public class Calculator {
                 Integer key = (Integer)it.next();
                 Integer value = (Integer) map.get(key);
 
-//                System.out.println("key:" + key + " value: " + value + " łącznie: " + (type == Type.second ? Math.pow(value, key) : (value * key)));
-
-                aa = aa + (type == Type.second ? Math.pow(value, key) : (value * key));
+                sum = sum + (type == MeasureType.DEPTH_POWER ? Math.pow(value, key) : (value * key));
 
                 if (mappings != null) {
-                    text = text + value.toString() + (type == Type.second ? "^" : "*") + key.toString() + (it.hasNext() ?  " + " : "");
+                    text = text + value.toString() + (type == MeasureType.DEPTH_POWER ? "^" : "*") + key.toString() + (it.hasNext() ?  " + " : "");
                 }
             }
 
@@ -163,7 +149,7 @@ public class Calculator {
                 text = text + "\n";
             }
 
-            return aa;
+            return sum;
         }
     }
 
@@ -186,8 +172,6 @@ public class Calculator {
         }
     }
 
-
-
     void valueOf(OntClass model, OntModel mappings, HashMap<Integer, Integer> map, Integer height) {
 
         if (model.hasSubClass()) {
@@ -209,8 +193,6 @@ public class Calculator {
         }
     }
 
-
-
     private String rightPad(String text, int length) {
         return String.format("%-" + length + "." + length + "s", text);
     }
@@ -219,7 +201,6 @@ public class Calculator {
 
         try (PrintWriter writer = new PrintWriter(new File(documentTitle+ ".csv"))) {
             writer.write(string);
-            System.out.println("done!");
 
         } catch (FileNotFoundException e) {
             System.out.println(e.getMessage());
